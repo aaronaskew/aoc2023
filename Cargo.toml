@@ -1,7 +1,9 @@
 [workspace]
 resolver = "2"
 
-members=["day-*"]
+members = ["day-*"]
 
 [workspace.dependencies]
 nom = "7.1.3"
+indicatif = "0.17.7"
+rayon = "1.8.0"
