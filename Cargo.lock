@@ -120,10 +120,7 @@ dependencies = [
 name = "day-09"
 version = "0.1.0"
 dependencies = [
- "indicatif",
  "itertools",
- "nom",
- "num-integer",
  "rayon",
 ]
 
