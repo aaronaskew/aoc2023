@@ -11,7 +11,7 @@ use nom_locate::{position, LocatedSpan};
 
 fn main() {
     let input = include_str!("input1.txt");
-    let output = part1(input);
+    let output = process(input);
     dbg!(output);
 }
 
@@ -39,8 +39,7 @@ enum PipeType {
 #[derive(Debug, Copy, Clone)]
 struct Cell {
     pipe_type: PipeType,
-    line: usize,
-    column: usize,
+    position: Pos,
     distance_from_start: Option<u32>,
 }
 
@@ -65,20 +64,16 @@ fn parse_cell(input: Span) -> IResult<Span, Cell> {
         input,
         Cell {
             pipe_type,
-            line: position.location_line() as usize,
-            column: position.get_column() - 1,
+            position: (position.location_line() as usize, position.get_column() - 1),
             distance_from_start: None,
         },
     ))
 }
 
-fn parse_grid(input: Span) -> IResult<Span, HashMap<(usize, usize), Cell>> {
+fn parse_grid(input: Span) -> IResult<Span, HashMap<Pos, Cell>> {
     let (input, cells) = many1(terminated(parse_cell, multispace0))(input)?;
 
-    let cells = cells
-        .iter()
-        .map(|cell| ((cell.line, cell.column), *cell))
-        .collect();
+    let cells = cells.iter().map(|cell| (cell.position, *cell)).collect();
 
     Ok((input, cells))
 }
@@ -115,19 +110,22 @@ enum Direction {
     West,
 }
 
-fn part1(input: &str) -> String {
+/// Position = (usize, usize) `(x, y)` `(col, row)`
+type Pos = (usize, usize);
+
+fn process(input: &str) -> String {
     println!("{}", &input);
     let input = Span::new(input);
     let (_, mut grid) = parse_grid(input).expect("should parse grid");
-    dbg!(&grid);
+    //dbg!(&grid);
 
-    let (&start_position, _) = grid
+    let (&start_position:Pos, _) = grid
         .iter()
         .find(|(_, cell)| cell.pipe_type == StartingPosition)
         .unwrap();
     grid.get_mut(&start_position).unwrap().distance_from_start = Some(0);
 
-    dbg!(&grid);
+    // dbg!(&grid);
 
     let mut current_position = start_position;
     let mut distance = 0_u32;
@@ -141,15 +139,25 @@ fn part1(input: &str) -> String {
         // dbg!(can_go(&grid, current_position, South));
         // dbg!(can_go(&grid, current_position, West));
 
-        if can_go(&grid, current_position, North) {
-            current_position = (current_position.0, current_position.1 - 1);
-        } else if can_go(&grid, current_position, East) {
-            current_position = (current_position.0 + 1, current_position.1);
-        } else if can_go(&grid, current_position, South) {
+        if can_go(&grid, current_position, North)
+            && previous_position != (current_position.0 - 1, current_position.1)
+        {
+            current_position = (current_position.0 - 1, current_position.1);
+        } else if can_go(&grid, current_position, East)
+            && previous_position != (current_position.0, current_position.1 + 1)
+        {
             current_position = (current_position.0, current_position.1 + 1);
-        } else if can_go(&grid, current_position, West) {
+        } else if can_go(&grid, current_position, South)
+            && previous_position != (current_position.0 + 1, current_position.1)
+        {
+            current_position = (current_position.0 + 1, current_position.1);
+        } else if can_go(&grid, current_position, West)
+            && previous_position != (current_position.0, current_position.1 - 1)
+        {
             current_position = (current_position.0, current_position.1 - 1);
         }
+
+        dbg!(&current_position);
     }
 
     todo!("be quite!")
@@ -162,7 +170,7 @@ mod tests {
 
     #[test]
     fn example() {
-        let result = part1(
+        let result = process(
             ".....
 .S-7.
 .|.|.
@@ -172,7 +180,7 @@ mod tests {
 
         assert_eq!(result, "4");
 
-        let result = part1(
+        let result = process(
             "..F7.
 .FJ|.
 SJ.L7
