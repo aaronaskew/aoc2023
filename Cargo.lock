@@ -190,6 +190,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "day-18"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "itertools",
+ "nom",
+]
+
+[[package]]
 name = "day-_"
 version = "0.1.0"
 dependencies = [
