@@ -1,4 +1,5 @@
-use std::collections::{BinaryHeap, HashMap};
+use pathfinding::prelude::dijkstra;
+use std::char::from_digit;
 
 fn main() {
     let input = include_str!("input1.txt");
@@ -62,107 +63,6 @@ impl Node {
     }
 }
 
-/// The state we'll track in our priority queue. We need to track the node above
-/// and the cost to get there.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct State {
-    node: Node,
-    cost: usize,
-}
-
-impl Ord for State {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        // We are using a min heap, so we are doing this backwards
-        other
-            .cost
-            .cmp(&self.cost)
-            .then_with(|| self.node.cmp(&other.node))
-    }
-}
-
-impl PartialOrd for State {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-fn neighbors(node: &Node, grid: &[Vec<usize>]) -> Vec<Node> {
-    let mut neighbors = Vec::new();
-
-    for (d, p) in node.position.valid_next(grid) {
-        if d != node.direction {
-            match (d, node.direction) {
-                (Direction::North, Direction::South)
-                | (Direction::South, Direction::North)
-                | (Direction::East, Direction::West)
-                | (Direction::West, Direction::East) => {}
-                _ => neighbors.push(Node::new(p, d, 1)),
-            }
-        } else if node.direction_count < 3 {
-            neighbors.push(Node::new(p, d, node.direction_count + 1));
-        }
-    }
-
-    neighbors
-}
-
-fn dijkstra<F>(
-    grid: &[Vec<usize>],
-    start: &Position,
-    goal: &Position,
-    neighbor_fn: F,
-) -> Option<usize>
-where
-    F: Fn(&Node, &[Vec<usize>]) -> Vec<Node>,
-{
-    // Track our min distances at each node. In our specific case,
-    // we have multiple because we could be coming from South or East at
-    // the start.
-    let mut distances = HashMap::new();
-    distances.insert(Node::new(*start, Direction::East, 0), 0);
-    distances.insert(Node::new(*start, Direction::South, 0), 0);
-
-    // Track paths we want to visit. We have two again.
-    let mut frontier = BinaryHeap::new();
-    frontier.push(State {
-        node: Node::new(*start, Direction::East, 0),
-        cost: 0,
-    });
-    frontier.push(State {
-        node: Node::new(*start, Direction::South, 0),
-        cost: 0,
-    });
-
-    // Grab the next node from the frontier
-    while let Some(State { node, cost }) = frontier.pop() {
-        // If we are at the goal, we are done
-        if node.position == *goal {
-            return Some(cost);
-        }
-
-        // Otherwise, check our neighbors
-        for neighbor in neighbor_fn(&node, grid) {
-            // If we've already visited this node and it was cheaper,
-            // we don't need to keep checking this way.
-            let new_cost = cost + grid[neighbor.position.y][neighbor.position.x];
-            if let Some(&best) = distances.get(&neighbor) {
-                if new_cost >= best {
-                    continue;
-                }
-            }
-
-            // Otherwise, add it to our distances and frontier.
-            distances.insert(neighbor, new_cost);
-            frontier.push(State {
-                node: neighbor,
-                cost: new_cost,
-            })
-        }
-    }
-
-    None
-}
-
 fn process(input: &str) -> String {
     let grid: Vec<Vec<usize>> = input
         .lines()
@@ -173,14 +73,80 @@ fn process(input: &str) -> String {
         })
         .collect();
 
-    let start = Position::new(0, 0);
-    let goal = Position::new(grid[0].len() - 1, grid.len() - 1);
-    let now = std::time::Instant::now();
+    let goal_position = Position::new(grid[0].len() - 1, grid.len() - 1);
 
-    let min_distance = dijkstra(&grid, &start, &goal, neighbors).unwrap();
-    dbg!(&min_distance, now.elapsed());
+    let neighbors = |node: &Node| -> Vec<(Node, usize)> {
+        let mut neighbors_and_costs = Vec::new();
 
-    min_distance.to_string()
+        for (d, p) in node.position.valid_next(&grid) {
+            let neighbor = if d != node.direction {
+                match (d, node.direction) {
+                    (Direction::North, Direction::South)
+                    | (Direction::South, Direction::North)
+                    | (Direction::East, Direction::West)
+                    | (Direction::West, Direction::East) => None,
+                    _ => Some(Node::new(p, d, 1)),
+                }
+            } else if node.direction_count < 3 {
+                Some(Node::new(p, d, node.direction_count + 1))
+            } else {
+                None
+            };
+
+            if let Some(neighbor) = neighbor {
+                neighbors_and_costs.push((neighbor, grid[neighbor.position.y][neighbor.position.x]))
+            }
+        }
+
+        // dbg!(&neighbors_and_costs);
+
+        neighbors_and_costs
+    };
+
+    let success = |node: &Node| -> bool { node.position == goal_position };
+
+    let start = Node::new(Position::new(0, 0), Direction::East, 0);
+    // let start2 = Node::new(Position::new(0, 0), Direction::South, 0);
+
+    let now = std::time::SystemTime::now();
+
+    if let Some((path, min_heat_loss)) = dijkstra(&start, neighbors, success) {
+        draw_path(grid, path);
+        dbg!(now.elapsed().unwrap());
+        return min_heat_loss.to_string();
+    }
+
+    todo!()
+}
+
+fn draw_path(grid: Vec<Vec<usize>>, path: Vec<Node>) {
+    let mut new_grid: Vec<Vec<char>> = grid
+        .iter()
+        .map(|v| {
+            v.iter()
+                .map(|cost| from_digit((*cost).try_into().unwrap(), 10).unwrap())
+                .collect()
+        })
+        .collect();
+
+    for node in path {
+        let x = node.position.x;
+        let y = node.position.y;
+
+        new_grid[y][x] = match node.direction {
+            Direction::North => '^',
+            Direction::South => 'V',
+            Direction::East => '>',
+            Direction::West => '<',
+        }
+    }
+
+    for y in 0..new_grid.len() {
+        for x in 0..new_grid[0].len() {
+            print!("{}", new_grid[y][x]);
+        }
+        println!()
+    }
 }
 
 #[cfg(test)]

@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 itertools.workspace = true
+pathfinding = "4.9.1"
